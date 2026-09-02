@@ -26,15 +26,17 @@ def _energia_para_tamanho_pequeno(imagem: np.ndarray, operador: str) -> np.ndarr
     return calcular_energia(imagem_ampliada, operador)[:altura, :largura]
 
 
-def reduzir_largura(imagem: np.ndarray, quantidade: int, operador: str = "dual") -> tuple[np.ndarray, list[list[int]]]:
+def reduzir_largura(imagem: np.ndarray, quantidade: int, operador: str = "dual", progresso=None) -> tuple[np.ndarray, list[list[int]]]:
     """Remove costuras, recalculando a energia completa a cada iteracao."""
     imagem_atual = np.asarray(imagem, dtype=np.float64)
     if quantidade < 0 or quantidade >= imagem_atual.shape[1]:
         raise ValueError("quantidade deve ser menor que a largura atual")
     costuras = []
-    for _ in range(quantidade):
+    for indice in range(quantidade):
         energia = _energia_para_tamanho_pequeno(imagem_atual, operador)
         seam = encontrar_seam_vertical(energia)
         costuras.append(seam)
         imagem_atual = remover_seam_vertical(imagem_atual, seam)
+        if progresso is not None:
+            progresso(indice + 1, quantidade)
     return imagem_atual, costuras
