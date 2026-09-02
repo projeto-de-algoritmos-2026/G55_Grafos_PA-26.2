@@ -178,6 +178,15 @@ Abra o navegador em [http://localhost:8000](http://localhost:8000)
 
 ## Uso
 
+### CLI
+
+```sh
+.venv/bin/python cli.py assets/exemplo.ppm saida.png --largura 3
+.venv/bin/python cli.py assets/exemplo.ppm saida.png --largura 3 --energia sobel --mapa-energia energia.png
+```
+
+O comando mostra a quantidade de costuras removidas e o tempo total de execucao.
+
 1. **Carregue uma imagem** pelo botão de upload ou selecione uma das imagens de exemplo disponíveis.
 2. **Visualize o mapa de energia** ativando a opção correspondente. Regiões escuras são candidatas naturais à remoção.
 3. **Ative a exibição da costura** para acompanhar, em vermelho, qual caminho o algoritmo escolheu antes de cada remoção.
