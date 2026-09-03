@@ -55,17 +55,35 @@ async function api(caminho, opcoes) {
     return resposta;
 }
 
-/** Exibe a mensagem de erro (substituida por faixa visual na leva final). */
+/** Exibe a mensagem de erro na faixa de aviso visivel da interface. */
 function mostrarErro(mensagem) {
-    console.error(mensagem);
+    refs.faixaErro.textContent = `Erro: ${mensagem}`;
+    refs.faixaErro.hidden = false;
 }
 
-/** Limpa o estado de erro exibido. */
+/** Oculta a faixa de aviso de erro. */
 function limparErro() {
+    refs.faixaErro.hidden = true;
+    refs.faixaErro.textContent = "";
 }
 
-/** Ativa ou desativa o indicador de carregamento (leva final). */
+/** Ativa ou desativa o overlay de carregamento e os controles. */
 function definirCarregando(ativo) {
+    refs.overlayCarregando.hidden = !ativo;
+    const controles = [
+        refs.botaoUpload,
+        refs.entradaArquivo,
+        refs.seletorExemplo,
+        refs.seletorOperador,
+        refs.seletorCamada,
+        refs.caixaCostura,
+        refs.controleLargura,
+        refs.botaoAplicar,
+        refs.botaoRestaurar,
+    ];
+    controles.forEach((controle) => {
+        controle.disabled = ativo;
+    });
 }
 
 /** Executa uma operacao assincrona com tratamento de erro e carregamento. */
