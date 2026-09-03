@@ -9,7 +9,7 @@ import io
 import logging
 import time
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
@@ -20,7 +20,12 @@ from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
 
 from backend.algoritmos.energia import calcular_energia, energia_para_imagem
-from backend.algoritmos.remocao import reduzir_largura
+from backend.algoritmos.remocao import (
+    ampliar_altura,
+    ampliar_largura,
+    reduzir_altura,
+    reduzir_largura,
+)
 from backend.algoritmos.seam_dp import custo_do_seam, encontrar_seam_vertical
 from backend.utils.imagem import limitar_resolucao
 from backend.utils.sessao import sessao
@@ -68,10 +73,13 @@ class RespostaSeam(BaseModel):
 
 
 class RequisicaoRedimensionar(BaseModel):
-    """Corpo da requisicao de redimensionamento."""
+    """Corpo da requisicao de redimensionamento.
+
+    Alvos omitidos (None) mantem a dimensao correspondente."""
 
     id: str
-    largura_alvo: int
+    largura_alvo: Optional[int] = None
+    altura_alvo: Optional[int] = None
     operador: str = "dual"
 
 
@@ -309,41 +317,84 @@ def obter_seam(identificador: str, orientacao: str = "vertical", operador: str =
     return RespostaSeam(seam=seam, custo=custo_do_seam(energia, seam), orientacao=orientacao)
 
 
+def _redimensionar_eixo(imagem: np.ndarray, alvo: int, eixo: str, operador: str) -> tuple[np.ndarray, int]:
+    """Leva um eixo da imagem ate a dimensao alvo, reduzindo ou ampliando.
+
+    Parametros:
+        imagem: array float64 de formato (H, W, 3).
+        alvo: dimensao final desejada para o eixo.
+        eixo: "largura" ou "altura".
+        operador: operador de energia ("dual" ou "sobel").
+
+    Retorno:
+        Tupla com a imagem resultante e o numero de costuras processadas.
+        Levanta ValueError se o alvo for menor que 2 ou maior que o dobro
+        da dimensao atual.
+
+    Complexidade:
+        O(k * H * W), onde k e o numero de costuras processadas.
+    """
+    atual = imagem.shape[1] if eixo == "largura" else imagem.shape[0]
+    if alvo < 2:
+        raise ValueError(f"{eixo}_alvo reduziria a imagem a menos de 2 pixels")
+    if alvo > 2 * atual:
+        raise ValueError(f"{eixo}_alvo nao pode exceder o dobro da {eixo} atual")
+    quantidade = abs(alvo - atual)
+    if quantidade == 0:
+        return imagem, 0
+    if alvo < atual:
+        reduzir = reduzir_largura if eixo == "largura" else reduzir_altura
+        resultado, costuras = reduzir(imagem, quantidade, operador)
+        return resultado, len(costuras)
+    ampliar = ampliar_largura if eixo == "largura" else ampliar_altura
+    return ampliar(imagem, quantidade, operador), quantidade
+
+
 @app.post(
     "/api/redimensionar",
     response_model=RespostaRedimensionar,
     responses={400: {"model": RespostaErro}, 404: {"model": RespostaErro}},
 )
 def redimensionar(requisicao: RequisicaoRedimensionar) -> RespostaRedimensionar:
-    """Reduz a largura da imagem removendo costuras de menor energia.
+    """Redimensiona a imagem em largura e altura por seam carving.
+
+    Cada alvo pode ser maior (ampliacao) ou menor (reducao) que a
+    dimensao atual; alvos omitidos mantem a dimensao. Quando ambos os
+    eixos mudam, processa primeiro o eixo de maior variacao absoluta:
+    assim as costuras mais numerosas sao escolhidas com a imagem ainda
+    integra no outro eixo, preservando mais conteudo. Empate processa
+    a largura primeiro.
 
     Parametros:
-        requisicao: id da imagem, largura alvo e operador de energia.
+        requisicao: id da imagem, alvos de largura e altura e operador.
 
     Retorno:
         RespostaRedimensionar com o PNG em base64 (sem prefixo data:),
-        dimensoes finais, numero de costuras removidas e tempo em ms.
-        Erro 400 se a largura alvo for invalida (menor que 2 ou maior
-        que a original) e 404 se o id nao existir.
+        dimensoes finais, total de costuras processadas e tempo em ms.
+        Erro 400 para alvos invalidos e 404 se o id nao existir.
 
     Complexidade:
-        O(k * H * W), onde k e o numero de costuras removidas.
+        O(k * H * W), onde k e o total de costuras processadas.
     """
     inicio = time.perf_counter()
     imagem = sessao.obter(requisicao.id)
-    largura_atual = imagem.shape[1]
-    if requisicao.largura_alvo < 2:
-        raise ValueError("largura_alvo reduziria a imagem a menos de 2 colunas")
-    if requisicao.largura_alvo > largura_atual:
-        raise ValueError("largura_alvo maior que a largura original")
-    quantidade = largura_atual - requisicao.largura_alvo
-    resultado, costuras = reduzir_largura(imagem, quantidade, requisicao.operador)
+    if requisicao.largura_alvo is None and requisicao.altura_alvo is None:
+        raise ValueError("informe largura_alvo, altura_alvo ou ambos")
+    alvo_largura = requisicao.largura_alvo if requisicao.largura_alvo is not None else imagem.shape[1]
+    alvo_altura = requisicao.altura_alvo if requisicao.altura_alvo is not None else imagem.shape[0]
+    eixos = [("largura", alvo_largura, abs(alvo_largura - imagem.shape[1])),
+             ("altura", alvo_altura, abs(alvo_altura - imagem.shape[0]))]
+    eixos.sort(key=lambda item: -item[2])
+    total_costuras = 0
+    for eixo, alvo, _ in eixos:
+        imagem, processadas = _redimensionar_eixo(imagem, alvo, eixo, requisicao.operador)
+        total_costuras += processadas
     _registrar_log("redimensionar", requisicao.id, inicio)
     return RespostaRedimensionar(
-        imagem_base64=base64.b64encode(_codificar_png(resultado)).decode("ascii"),
-        largura=resultado.shape[1],
-        altura=resultado.shape[0],
-        costuras_removidas=len(costuras),
+        imagem_base64=base64.b64encode(_codificar_png(imagem)).decode("ascii"),
+        largura=imagem.shape[1],
+        altura=imagem.shape[0],
+        costuras_removidas=total_costuras,
         tempo_ms=(time.perf_counter() - inicio) * 1000.0,
     )
 
