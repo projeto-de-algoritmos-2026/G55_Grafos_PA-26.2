@@ -137,3 +137,122 @@ def reduzir_altura(
     transposta = np.transpose(np.asarray(imagem, dtype=np.float64), (1, 0, 2))
     reduzida, costuras = reduzir_largura(transposta, quantidade, operador, progresso)
     return np.transpose(reduzida, (1, 0, 2)), costuras
+
+
+def _costuras_distintas(imagem: np.ndarray, quantidade: int, operador: str) -> list[list[int]]:
+    """Encontra costuras verticais distintas em coordenadas originais.
+
+    Trabalha sobre uma copia da imagem e um array de rastreamento (H, W)
+    iniciado com np.arange por linha. A cada iteracao a costura de menor
+    energia da copia e convertida para as colunas originais consultando o
+    rastreamento, e entao removida da copia e do rastreamento. Como cada
+    coluna original sai do rastreamento ao ser usada, nenhuma coordenada
+    se repete entre costuras.
+
+    Parametros:
+        imagem: array float64 de formato (H, W, 3).
+        quantidade: numero de costuras distintas desejadas.
+        operador: nome do operador de energia ("dual" ou "sobel").
+
+    Retorno:
+        Lista de costuras em coordenadas da imagem original.
+
+    Complexidade:
+        O(k * H * W), onde k e a quantidade de costuras.
+    """
+    copia = imagem.copy()
+    altura = imagem.shape[0]
+    rastreamento = np.tile(np.arange(imagem.shape[1]), (altura, 1))
+    linhas = np.arange(altura)
+    costuras_originais = []
+    for _ in range(quantidade):
+        energia = _energia_para_tamanho_pequeno(copia, operador)
+        seam = encontrar_seam_vertical(energia)
+        costuras_originais.append(rastreamento[linhas, seam].tolist())
+        mascara = np.ones(rastreamento.shape, dtype=bool)
+        mascara[linhas, seam] = False
+        copia = remover_seam_vertical(copia, seam)
+        rastreamento = rastreamento[mascara].reshape(altura, -1)
+    return costuras_originais
+
+
+def _inserir_pixels(imagem: np.ndarray, costuras: list[list[int]]) -> np.ndarray:
+    """Insere um pixel novo ao lado de cada coordenada marcada pelas costuras.
+
+    Cada linha e processada uma unica vez com os indices ordenados
+    (np.insert ja interpreta os indices em relacao a linha original, o
+    que evita deslocamento acumulado incorreto). O pixel inserido e a
+    media entre o pixel marcado e o vizinho da direita, ou da esquerda
+    quando o marcado esta na ultima coluna.
+
+    Parametros:
+        imagem: array float64 de formato (H, W, 3).
+        costuras: costuras em coordenadas originais, uma coluna por linha.
+
+    Retorno:
+        Array float64 de formato (H, W + len(costuras), 3).
+
+    Complexidade:
+        O(k * H + H * W), onde k e o numero de costuras.
+    """
+    altura, largura = imagem.shape[:2]
+    linhas_novas = []
+    for y in range(altura):
+        colunas = np.sort(np.array([costura[y] for costura in costuras], dtype=np.int64))
+        vizinhos = np.where(colunas < largura - 1, colunas + 1, colunas - 1)
+        medias = (imagem[y, colunas] + imagem[y, vizinhos]) / 2.0
+        linhas_novas.append(np.insert(imagem[y], colunas + 1, medias, axis=0))
+    return np.stack(linhas_novas)
+
+
+def ampliar_largura(imagem: np.ndarray, quantidade: int, operador: str = "dual") -> np.ndarray:
+    """Aumenta a largura duplicando as costuras de menor energia.
+
+    As costuras sao encontradas uma a uma sobre uma copia da imagem com
+    rastreamento de indices originais, garantindo que nenhuma costura se
+    repita (o que causaria uma faixa borrada). Depois, cada pixel marcado
+    recebe ao lado um pixel novo com a media entre ele e o vizinho.
+
+    Parametros:
+        imagem: array de formato (H, W, 3).
+        quantidade: numero de costuras a duplicar.
+        operador: nome do operador de energia ("dual" ou "sobel").
+
+    Retorno:
+        Array float64 de formato (H, W + quantidade, 3). Levanta
+        ValueError se quantidade for negativa ou exceder a largura atual,
+        pois acima disso nao ha costuras distintas suficientes.
+
+    Complexidade:
+        O(k * H * W), onde k e a quantidade de costuras.
+    """
+    imagem = np.asarray(imagem, dtype=np.float64)
+    if quantidade < 0 or quantidade > imagem.shape[1]:
+        raise ValueError("quantidade nao pode exceder a largura atual")
+    if quantidade == 0:
+        return imagem.copy()
+    costuras = _costuras_distintas(imagem, quantidade, operador)
+    return _inserir_pixels(imagem, costuras)
+
+
+def ampliar_altura(imagem: np.ndarray, quantidade: int, operador: str = "dual") -> np.ndarray:
+    """Aumenta a altura duplicando costuras horizontais, por transposicao.
+
+    Mesma justificativa de reduzir_altura: costuras horizontais da imagem
+    original sao costuras verticais da transposta, e a energia e simetrica
+    a transposicao dos eixos espaciais.
+
+    Parametros:
+        imagem: array de formato (H, W, 3).
+        quantidade: numero de costuras horizontais a duplicar.
+        operador: nome do operador de energia ("dual" ou "sobel").
+
+    Retorno:
+        Array float64 de formato (H + quantidade, W, 3). Levanta
+        ValueError se quantidade for negativa ou exceder a altura atual.
+
+    Complexidade:
+        O(k * H * W), onde k e a quantidade de costuras.
+    """
+    transposta = np.transpose(np.asarray(imagem, dtype=np.float64), (1, 0, 2))
+    return np.transpose(ampliar_largura(transposta, quantidade, operador), (1, 0, 2))
