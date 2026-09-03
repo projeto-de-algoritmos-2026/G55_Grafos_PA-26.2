@@ -146,6 +146,32 @@ def test_redimensionar_ambos_os_eixos_com_ampliacao() -> None:
     assert Image.open(io.BytesIO(png)).size == (16, 21)
 
 
+def test_remover_objeto_restaura_largura_original() -> None:
+    """A remocao de objeto devolve a imagem nas dimensoes originais."""
+    corpo = _enviar_imagem(altura=20, largura=30)
+    requisicao = {
+        "id": corpo["id"],
+        "remover": [[12, 10], [13, 10], [14, 10]],
+        "proteger": [],
+        "raio_pincel": 3,
+        "operador": "dual",
+    }
+    resposta = cliente.post("/api/remover-objeto", json=requisicao)
+    assert resposta.status_code == 200
+    dados = resposta.json()
+    assert (dados["largura"], dados["altura"]) == (30, 20)
+    assert dados["iteracoes"] > 0
+
+
+def test_remover_objeto_com_mascara_vazia_retorna_400() -> None:
+    """Sem pontos de remocao, o endpoint responde 400 com o motivo."""
+    corpo = _enviar_imagem(altura=10, largura=12)
+    requisicao = {"id": corpo["id"], "remover": [], "raio_pincel": 4}
+    resposta = cliente.post("/api/remover-objeto", json=requisicao)
+    assert resposta.status_code == 400
+    assert "vazia" in resposta.json()["erro"]
+
+
 def test_redimensionar_com_largura_maior_retorna_400() -> None:
     """largura_alvo maior que a original retorna 400."""
     corpo = _enviar_imagem(altura=10, largura=12)
