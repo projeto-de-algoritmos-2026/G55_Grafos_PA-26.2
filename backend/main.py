@@ -20,11 +20,13 @@ from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
 
 from backend.algoritmos.energia import calcular_energia, energia_para_imagem
+from backend.algoritmos.conectividade import validar_mascara
 from backend.algoritmos.remocao import (
     ampliar_altura,
     ampliar_largura,
     reduzir_altura,
     reduzir_largura,
+    remover_objeto,
 )
 from backend.algoritmos.seam_dp import custo_do_seam, encontrar_seam_vertical
 from backend.utils.imagem import limitar_resolucao
@@ -93,6 +95,28 @@ class RespostaRedimensionar(BaseModel):
     tempo_ms: float
 
 
+class RequisicaoRemoverObjeto(BaseModel):
+    """Corpo da requisicao de remocao de objeto.
+
+    Os pontos sao pares [x, y] em coordenadas da imagem armazenada."""
+
+    id: str
+    remover: list[list[int]]
+    proteger: list[list[int]] = []
+    raio_pincel: int = 8
+    operador: str = "dual"
+
+
+class RespostaRemoverObjeto(BaseModel):
+    """Resposta da remocao de objeto."""
+
+    imagem_base64: str
+    largura: int
+    altura: int
+    iteracoes: int
+    tempo_ms: float
+
+
 def _registrar_log(operacao: str, identificador: str, inicio: float) -> None:
     """Registra id, operacao e duracao de uma chamada da API.
 
@@ -143,6 +167,52 @@ async def tratar_entrada_invalida(requisicao: Request, excecao: ValueError) -> J
         O(1).
     """
     return JSONResponse(status_code=400, content={"erro": str(excecao)})
+
+
+@app.exception_handler(RuntimeError)
+async def tratar_limite_excedido(requisicao: Request, excecao: RuntimeError) -> JSONResponse:
+    """Converte RuntimeError dos algoritmos em HTTP 400 sem stack trace.
+
+    Parametros:
+        requisicao: requisicao que causou o erro.
+        excecao: RuntimeError levantado pelo limite de seguranca.
+
+    Retorno:
+        JSONResponse 400 com {"erro": mensagem}.
+
+    Complexidade:
+        O(1).
+    """
+    return JSONResponse(status_code=400, content={"erro": str(excecao)})
+
+
+def _pontos_para_mascara(pontos: list[list[int]], altura: int, largura: int, raio: int) -> np.ndarray:
+    """Converte pontos [x, y] em mascara booleana aplicando o raio do pincel.
+
+    Cada ponto marca o disco de pixels a ate `raio` de distancia
+    euclidiana, recortado nas bordas da imagem.
+
+    Parametros:
+        pontos: lista de pares [x, y] em coordenadas da imagem.
+        altura: numero de linhas da imagem.
+        largura: numero de colunas da imagem.
+        raio: raio do pincel em pixels.
+
+    Retorno:
+        Matriz booleana de formato (altura, largura).
+
+    Complexidade:
+        O(P * raio^2), onde P e o numero de pontos.
+    """
+    mascara = np.zeros((altura, largura), dtype=bool)
+    deslocamentos = np.arange(-raio, raio + 1)
+    delta_y, delta_x = np.meshgrid(deslocamentos, deslocamentos, indexing="ij")
+    disco = delta_y**2 + delta_x**2 <= raio**2
+    for x, y in pontos:
+        linhas = np.clip(y + delta_y[disco], 0, altura - 1)
+        colunas = np.clip(x + delta_x[disco], 0, largura - 1)
+        mascara[linhas, colunas] = True
+    return mascara
 
 
 def _decodificar_imagem(dados: bytes) -> np.ndarray:
@@ -395,6 +465,53 @@ def redimensionar(requisicao: RequisicaoRedimensionar) -> RespostaRedimensionar:
         largura=imagem.shape[1],
         altura=imagem.shape[0],
         costuras_removidas=total_costuras,
+        tempo_ms=(time.perf_counter() - inicio) * 1000.0,
+    )
+
+
+@app.post(
+    "/api/remover-objeto",
+    response_model=RespostaRemoverObjeto,
+    responses={400: {"model": RespostaErro}, 404: {"model": RespostaErro}},
+)
+def remover_objeto_api(requisicao: RequisicaoRemoverObjeto) -> RespostaRemoverObjeto:
+    """Remove o objeto marcado pelos pinceis e restaura a largura original.
+
+    A validacao de mascara e aplicada apenas a mascara de remocao; a de
+    protecao pode ser vazia legitimamente.
+
+    Parametros:
+        requisicao: id da imagem, pontos de remocao e protecao, raio do
+            pincel e operador de energia.
+
+    Retorno:
+        RespostaRemoverObjeto com o PNG em base64, dimensoes, numero de
+        costuras removidas no processo e tempo em ms. Erro 400 para
+        mascara invalida (com o motivo) e 404 se o id nao existir.
+
+    Complexidade:
+        O(k * H * W), onde k e o numero de costuras removidas.
+    """
+    inicio = time.perf_counter()
+    imagem = sessao.obter(requisicao.id)
+    altura, largura = imagem.shape[:2]
+    mascara_remover = _pontos_para_mascara(requisicao.remover, altura, largura, requisicao.raio_pincel)
+    mascara_proteger = _pontos_para_mascara(requisicao.proteger, altura, largura, requisicao.raio_pincel)
+    valido, motivo = validar_mascara(mascara_remover, largura)
+    if not valido:
+        raise ValueError(motivo)
+    iteracoes = [0]
+
+    def contar(iteracao: int, total: int) -> None:
+        iteracoes[0] = iteracao
+
+    resultado = remover_objeto(imagem, mascara_remover, mascara_proteger, requisicao.operador, contar)
+    _registrar_log("remover_objeto", requisicao.id, inicio)
+    return RespostaRemoverObjeto(
+        imagem_base64=base64.b64encode(_codificar_png(resultado)).decode("ascii"),
+        largura=resultado.shape[1],
+        altura=resultado.shape[0],
+        iteracoes=iteracoes[0],
         tempo_ms=(time.perf_counter() - inicio) * 1000.0,
     )
 
