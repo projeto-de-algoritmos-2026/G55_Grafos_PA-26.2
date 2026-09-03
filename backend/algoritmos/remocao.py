@@ -7,6 +7,12 @@ import numpy as np
 from .energia import calcular_energia
 from .seam_dp import encontrar_seam_vertical
 
+# Valores finitos grandes em vez de infinito: somar infinito na recorrencia
+# da tabela de custo acumulado pode gerar NaN (inf + (-inf)), enquanto
+# valores finitos preservam a ordenacao relativa sem esse risco.
+ENERGIA_REMOVER = -1e6
+ENERGIA_PROTEGER = 1e6
+
 
 def remover_seam_vertical(imagem: np.ndarray, seam: list[int]) -> np.ndarray:
     """Remove uma costura vertical da imagem com mascara booleana.
@@ -33,6 +39,40 @@ def remover_seam_vertical(imagem: np.ndarray, seam: list[int]) -> np.ndarray:
     mascara = np.ones((altura, largura), dtype=bool)
     mascara[np.arange(altura), seam] = False
     return imagem[mascara].reshape(altura, largura - 1, *imagem.shape[2:])
+
+
+def aplicar_mascara(
+    energia: np.ndarray,
+    mascara_remover: np.ndarray,
+    mascara_proteger: np.ndarray,
+) -> np.ndarray:
+    """Aplica mascaras de remocao e protecao sobre o mapa de energia.
+
+    Pixels marcados para remocao recebem ENERGIA_REMOVER (fortemente
+    negativa, atraindo as costuras) e pixels protegidos recebem
+    ENERGIA_PROTEGER (fortemente positiva, repelindo as costuras).
+    Precedencia: se um pixel estiver nas duas mascaras, a protecao
+    prevalece, pois e aplicada por ultimo. O array original nao e
+    modificado.
+
+    Parametros:
+        energia: matriz float64 de formato (H, W).
+        mascara_remover: matriz booleana de formato (H, W).
+        mascara_proteger: matriz booleana de formato (H, W).
+
+    Retorno:
+        Nova matriz float64 com as energias substituidas. Levanta
+        ValueError se os formatos nao coincidirem.
+
+    Complexidade:
+        O(H * W).
+    """
+    if energia.shape != mascara_remover.shape or energia.shape != mascara_proteger.shape:
+        raise ValueError("as mascaras devem ter o mesmo formato da energia")
+    resultado = energia.copy()
+    resultado[mascara_remover] = ENERGIA_REMOVER
+    resultado[mascara_proteger] = ENERGIA_PROTEGER
+    return resultado
 
 
 def _energia_para_tamanho_pequeno(imagem: np.ndarray, operador: str) -> np.ndarray:
