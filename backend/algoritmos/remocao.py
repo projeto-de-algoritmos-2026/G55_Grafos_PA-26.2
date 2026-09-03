@@ -275,6 +275,75 @@ def ampliar_largura(imagem: np.ndarray, quantidade: int, operador: str = "dual")
     return _inserir_pixels(imagem, costuras)
 
 
+def _remover_costura_da_mascara(mascara: np.ndarray, seam: list[int]) -> np.ndarray:
+    """Remove de uma mascara booleana os pixels percorridos pela costura.
+
+    Parametros:
+        mascara: matriz booleana de formato (H, W).
+        seam: lista de H colunas, uma por linha.
+
+    Retorno:
+        Matriz booleana de formato (H, W - 1).
+
+    Complexidade:
+        O(H * W).
+    """
+    altura, largura = mascara.shape
+    manter = np.ones((altura, largura), dtype=bool)
+    manter[np.arange(altura), seam] = False
+    return mascara[manter].reshape(altura, largura - 1)
+
+
+def remover_objeto(
+    imagem: np.ndarray,
+    mascara_remover: np.ndarray,
+    mascara_proteger: np.ndarray,
+    operador: str = "dual",
+    progresso: Optional[Callable[[int, int], None]] = None,
+) -> np.ndarray:
+    """Remove o objeto marcado e devolve a imagem na largura original.
+
+    Enquanto restar pixel marcado para remocao, a energia e calculada com
+    as mascaras aplicadas (remocao atrai a costura, protecao repele; a
+    protecao prevalece em pixels marcados nas duas), a costura de menor
+    custo e removida da imagem e das duas mascaras. Ao final, a largura
+    original e restaurada com ampliar_largura.
+
+    Parametros:
+        imagem: array de formato (H, W, 3).
+        mascara_remover: matriz booleana (H, W) do objeto a remover.
+        mascara_proteger: matriz booleana (H, W) das regioes protegidas.
+        operador: nome do operador de energia ("dual" ou "sobel").
+        progresso: funcao opcional chamada apos cada remocao com os
+            argumentos (iteracao, largura_inicial).
+
+    Retorno:
+        Array float64 de formato (H, W, 3) com o objeto removido.
+        Levanta RuntimeError se o numero de iteracoes exceder a largura
+        inicial (limite de seguranca contra mascaras degeneradas).
+
+    Complexidade:
+        O(k * H * W), onde k e o numero de costuras removidas.
+    """
+    imagem_atual = np.asarray(imagem, dtype=np.float64)
+    remover = np.asarray(mascara_remover, dtype=bool).copy()
+    proteger = np.asarray(mascara_proteger, dtype=bool).copy()
+    largura_inicial = imagem_atual.shape[1]
+    iteracoes = 0
+    while remover.any():
+        iteracoes += 1
+        if iteracoes > largura_inicial:
+            raise RuntimeError("limite de iteracoes excedido na remocao de objeto")
+        energia = aplicar_mascara(_energia_para_tamanho_pequeno(imagem_atual, operador), remover, proteger)
+        seam = encontrar_seam_vertical(energia)
+        imagem_atual = remover_seam_vertical(imagem_atual, seam)
+        remover = _remover_costura_da_mascara(remover, seam)
+        proteger = _remover_costura_da_mascara(proteger, seam)
+        if progresso is not None:
+            progresso(iteracoes, largura_inicial)
+    return ampliar_largura(imagem_atual, largura_inicial - imagem_atual.shape[1], operador)
+
+
 def ampliar_altura(imagem: np.ndarray, quantidade: int, operador: str = "dual") -> np.ndarray:
     """Aumenta a altura duplicando costuras horizontais, por transposicao.
 
