@@ -102,10 +102,26 @@ function atualizarPaineis(tempoMs) {
     refs.infoCosturas.textContent = String(estado.costurasRemovidas);
 }
 
-/** Busca e desenha a camada atual da imagem original (leva de camadas). */
+const cacheCamadas = new Map();
+
+/** Busca o blob da camada pedida, usando cache por id, camada e operador. */
+async function obterBlobCamada(camada, operador) {
+    const chave = `${estado.id}|${camada}|${operador}`;
+    if (!cacheCamadas.has(chave)) {
+        const caminho = camada === "energia"
+            ? `/api/energia/${estado.id}?operador=${operador}`
+            : `/api/imagem/${estado.id}`;
+        const resposta = await api(caminho);
+        cacheCamadas.set(chave, await resposta.blob());
+    }
+    return cacheCamadas.get(chave);
+}
+
+/** Desenha a camada selecionada da imagem original, sem novo upload. */
 async function atualizarExibicao() {
-    const resposta = await api(`/api/imagem/${estado.id}`);
-    await desenharBlob(await resposta.blob());
+    estado.exibindoResultado = false;
+    const blob = await obterBlobCamada(refs.seletorCamada.value, refs.seletorOperador.value);
+    await desenharBlob(blob);
     atualizarPaineis();
 }
 
@@ -118,6 +134,7 @@ async function enviarImagem(arquivo) {
     estado.id = corpo.id;
     estado.largura = corpo.largura;
     estado.altura = corpo.altura;
+    cacheCamadas.clear();
     estado.costurasRemovidas = 0;
     estado.exibindoResultado = false;
     refs.seletorCamada.value = "original";
@@ -227,5 +244,20 @@ function registrarEventosUpload() {
     });
 }
 
+/** Registra os eventos de troca de camada e de operador de energia. */
+function registrarEventosCamada() {
+    refs.seletorCamada.addEventListener("change", () => {
+        if (estado.id) {
+            executar(atualizarExibicao);
+        }
+    });
+    refs.seletorOperador.addEventListener("change", () => {
+        if (estado.id) {
+            executar(atualizarExibicao);
+        }
+    });
+}
+
 registrarEventosUpload();
+registrarEventosCamada();
 atualizarPaineis();
