@@ -4,9 +4,95 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SeamCarver</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>SeamCarver</h1>
-    <p>Redimensionamento inteligente de imagens com seam carving, modelado como caminho de custo minimo em um grafo direcionado aciclico.</p>
+    <header class="cabecalho">
+        <h1>SeamCarver</h1>
+        <p>Redimensionamento inteligente de imagens: cada pixel vira um vertice de um grafo aciclico e a costura removida e o caminho de custo minimo.</p>
+    </header>
+
+    <div id="faixa-erro" class="faixa-erro" hidden></div>
+
+    <main class="conteudo">
+        <aside class="painel painel-controles">
+            <h2>Controles</h2>
+
+            <label class="rotulo" for="entrada-arquivo">Imagem</label>
+            <div id="area-soltar" class="area-soltar">
+                <p>Arraste uma imagem aqui</p>
+                <button id="botao-upload" type="button">Escolher arquivo</button>
+                <input id="entrada-arquivo" type="file" accept="image/*" hidden>
+            </div>
+
+            <label class="rotulo" for="seletor-exemplo">Imagem de exemplo</label>
+            <select id="seletor-exemplo">
+                <option value="">Selecione um exemplo</option>
+                <option value="paisagem">Paisagem com casa e sol</option>
+                <option value="formas">Formas geometricas</option>
+            </select>
+
+            <label class="rotulo" for="seletor-operador">Operador de energia</label>
+            <select id="seletor-operador">
+                <option value="dual">Gradiente dual</option>
+                <option value="sobel">Sobel</option>
+            </select>
+
+            <label class="rotulo" for="seletor-camada">Camada exibida</label>
+            <select id="seletor-camada">
+                <option value="original">Imagem original</option>
+                <option value="energia">Mapa de energia</option>
+            </select>
+
+            <label class="rotulo-linha">
+                <input id="caixa-costura" type="checkbox">
+                Exibir costura de menor energia
+            </label>
+
+            <label class="rotulo" for="controle-largura">
+                Largura: <span id="valor-largura">100</span>%
+            </label>
+            <input id="controle-largura" type="range" min="20" max="100" value="100" step="1">
+
+            <div class="linha-botoes">
+                <button id="botao-aplicar" type="button" class="botao-principal">Aplicar</button>
+                <button id="botao-restaurar" type="button">Restaurar original</button>
+            </div>
+        </aside>
+
+        <section class="area-central">
+            <div class="moldura-canvas">
+                <canvas id="canvas-principal" width="0" height="0"></canvas>
+                <div id="overlay-carregando" class="overlay-carregando" hidden>
+                    <div class="spinner"></div>
+                    <p>Processando...</p>
+                </div>
+            </div>
+            <footer class="rodape-canvas">
+                <span id="rodape-dimensoes">Sem imagem carregada</span>
+                <span id="rodape-tempo"></span>
+            </footer>
+        </section>
+
+        <aside class="painel painel-informacoes">
+            <h2>Informacoes</h2>
+            <dl class="lista-info">
+                <dt>Id da imagem</dt>
+                <dd id="info-id">-</dd>
+                <dt>Dimensoes atuais</dt>
+                <dd id="info-dimensoes">-</dd>
+                <dt>Costuras removidas</dt>
+                <dd id="info-costuras">0</dd>
+                <dt>Custo da costura atual</dt>
+                <dd id="info-custo">-</dd>
+            </dl>
+            <div class="bloco-explicativo">
+                <h3>Modelagem em grafo</h3>
+                <p>Cada pixel (y, x) e um vertice com arestas para os tres vizinhos da linha de baixo, e o peso de cada aresta e a energia do pixel de destino. Como todas as arestas descem uma linha, o grafo e aciclico e o caminho de custo minimo entre o topo e a base, a costura, e resolvido por programacao dinamica em uma unica varredura.</p>
+            </div>
+        </aside>
+    </main>
+
+    <script type="module" src="app.js"></script>
 </body>
 </html>

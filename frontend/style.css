@@ -1,0 +1,243 @@
+/* Tema escuro sobrio da interface do SeamCarver. */
+
+:root {
+    --cor-fundo: #14161a;
+    --cor-painel: #1e2128;
+    --cor-borda: #2c313a;
+    --cor-texto: #d7dae0;
+    --cor-texto-suave: #9aa1ab;
+    --cor-destaque: #4d8dd6;
+    --cor-erro-fundo: #3a1d1f;
+    --cor-erro-borda: #b34a4f;
+    --cor-erro-texto: #f0b6b9;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    background: var(--cor-fundo);
+    color: var(--cor-texto);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px;
+}
+
+.cabecalho {
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--cor-borda);
+}
+
+.cabecalho h1 {
+    margin: 0;
+    font-size: 20px;
+}
+
+.cabecalho p {
+    margin: 2px 0 0;
+    color: var(--cor-texto-suave);
+    font-size: 13px;
+}
+
+.faixa-erro {
+    margin: 8px 20px 0;
+    padding: 10px 14px;
+    border: 1px solid var(--cor-erro-borda);
+    border-radius: 6px;
+    background: var(--cor-erro-fundo);
+    color: var(--cor-erro-texto);
+}
+
+.conteudo {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr) 280px;
+    gap: 12px;
+    padding: 12px 20px;
+    min-height: 0;
+}
+
+.painel {
+    background: var(--cor-painel);
+    border: 1px solid var(--cor-borda);
+    border-radius: 8px;
+    padding: 14px;
+    overflow-y: auto;
+}
+
+.painel h2 {
+    margin: 0 0 10px;
+    font-size: 15px;
+}
+
+.rotulo {
+    display: block;
+    margin: 14px 0 4px;
+    color: var(--cor-texto-suave);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.rotulo-linha {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 14px 0 4px;
+}
+
+.area-soltar {
+    border: 1px dashed var(--cor-borda);
+    border-radius: 6px;
+    padding: 14px;
+    text-align: center;
+}
+
+.area-soltar.ativa {
+    border-color: var(--cor-destaque);
+}
+
+.area-soltar p {
+    margin: 0 0 8px;
+    color: var(--cor-texto-suave);
+}
+
+select,
+button,
+input[type="range"] {
+    width: 100%;
+    font: inherit;
+}
+
+select,
+button {
+    padding: 7px 10px;
+    border: 1px solid var(--cor-borda);
+    border-radius: 6px;
+    background: var(--cor-fundo);
+    color: var(--cor-texto);
+    cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+    border-color: var(--cor-destaque);
+}
+
+button:disabled,
+select:disabled,
+input:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.botao-principal {
+    background: var(--cor-destaque);
+    border-color: var(--cor-destaque);
+    color: #ffffff;
+}
+
+.linha-botoes {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.area-central {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+}
+
+.moldura-canvas {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--cor-painel);
+    border: 1px solid var(--cor-borda);
+    border-radius: 8px;
+    min-height: 0;
+    overflow: hidden;
+}
+
+#canvas-principal {
+    max-width: 100%;
+    max-height: 100%;
+    image-rendering: auto;
+}
+
+.overlay-carregando {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: rgba(20, 22, 26, 0.75);
+}
+
+.spinner {
+    width: 34px;
+    height: 34px;
+    border: 4px solid var(--cor-borda);
+    border-top-color: var(--cor-destaque);
+    border-radius: 50%;
+    animation: girar 0.9s linear infinite;
+}
+
+@keyframes girar {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.rodape-canvas {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 4px 0;
+    color: var(--cor-texto-suave);
+    font-size: 13px;
+}
+
+.lista-info {
+    margin: 0;
+}
+
+.lista-info dt {
+    margin-top: 10px;
+    color: var(--cor-texto-suave);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.lista-info dd {
+    margin: 2px 0 0;
+    word-break: break-all;
+}
+
+.bloco-explicativo {
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px solid var(--cor-borda);
+}
+
+.bloco-explicativo h3 {
+    margin: 0 0 6px;
+    font-size: 13px;
+}
+
+.bloco-explicativo p {
+    margin: 0;
+    color: var(--cor-texto-suave);
+    font-size: 13px;
+    line-height: 1.5;
+}
