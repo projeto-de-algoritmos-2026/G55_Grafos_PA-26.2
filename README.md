@@ -196,6 +196,30 @@ O comando mostra a quantidade de costuras removidas e o tempo total de execucao.
 7. **Para segmentar**, alterne para o modo de corte mínimo, marque traços sobre o objeto e sobre o fundo e execute a separação.
 8. **Consulte o painel de benchmark** para comparar o desempenho das duas abordagens de caminho mínimo sobre a mesma imagem.
 
+## Contrato da API
+
+A documentacao interativa fica em `/docs` (OpenAPI). Erros de dominio retornam
+sempre o corpo `{"erro": mensagem}`: 404 para imagem nao encontrada e 400 para
+entradas invalidas. Uploads acima de 10 MB retornam 413. A sessao guarda ate 20
+imagens em memoria, descartando a mais antiga ao exceder o limite.
+
+| Metodo | Rota | Entrada | Resposta 200 |
+| -- | -- | -- | -- |
+| GET | `/api/saude` | nenhuma | `{"status": "ok", "versao": "0.1.0"}` |
+| POST | `/api/imagem` | multipart, campo `arquivo` | `{"id", "largura", "altura"}` |
+| GET | `/api/imagem/{id}` | id na rota | PNG da imagem armazenada |
+| GET | `/api/energia/{id}` | query `operador` (`dual` ou `sobel`) | PNG do mapa de energia em tons de cinza |
+| GET | `/api/seam/{id}` | query `orientacao` (`vertical`) e `operador` | `{"seam": [int], "custo": float, "orientacao"}` |
+| POST | `/api/redimensionar` | JSON `{"id", "largura_alvo", "operador"}` | `{"imagem_base64", "largura", "altura", "costuras_removidas", "tempo_ms"}` |
+
+Observacoes:
+
+- No upload, a imagem e convertida para RGB e limitada a 1024 pixels na maior
+  dimensao; `largura` e `altura` retornadas sao as da imagem armazenada.
+- `imagem_base64` contem o PNG em base64 sem o prefixo `data:image/png;base64,`;
+  o frontend adiciona o prefixo.
+- `/api/redimensionar` aceita `largura_alvo` entre 2 e a largura atual.
+
 ## Benchmark
 
 ## Observações Técnicas
