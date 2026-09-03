@@ -6,14 +6,15 @@ e o servico de arquivos estaticos do frontend.
 
 import base64
 import io
+import logging
 import time
 from pathlib import Path
 from typing import Dict
 
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
@@ -26,6 +27,9 @@ from backend.utils.sessao import sessao
 
 DIRETORIO_FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
 TAMANHO_MAXIMO_UPLOAD = 10 * 1024 * 1024
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("seamcarver")
 
 app = FastAPI(title="SeamCarver", version="0.1.0")
 
@@ -79,6 +83,58 @@ class RespostaRedimensionar(BaseModel):
     altura: int
     costuras_removidas: int
     tempo_ms: float
+
+
+def _registrar_log(operacao: str, identificador: str, inicio: float) -> None:
+    """Registra id, operacao e duracao de uma chamada da API.
+
+    Parametros:
+        operacao: nome da operacao executada.
+        identificador: id da imagem envolvida.
+        inicio: instante inicial medido com time.perf_counter.
+
+    Retorno:
+        None.
+
+    Complexidade:
+        O(1).
+    """
+    duracao_ms = (time.perf_counter() - inicio) * 1000.0
+    logger.info("operacao=%s id=%s duracao_ms=%.1f", operacao, identificador, duracao_ms)
+
+
+@app.exception_handler(KeyError)
+async def tratar_imagem_ausente(requisicao: Request, excecao: KeyError) -> JSONResponse:
+    """Converte KeyError da sessao em HTTP 404 com corpo padronizado.
+
+    Parametros:
+        requisicao: requisicao que causou o erro.
+        excecao: KeyError levantado pela sessao.
+
+    Retorno:
+        JSONResponse 404 com {"erro": "imagem nao encontrada"}.
+
+    Complexidade:
+        O(1).
+    """
+    return JSONResponse(status_code=404, content={"erro": "imagem nao encontrada"})
+
+
+@app.exception_handler(ValueError)
+async def tratar_entrada_invalida(requisicao: Request, excecao: ValueError) -> JSONResponse:
+    """Converte ValueError dos algoritmos em HTTP 400 com a mensagem.
+
+    Parametros:
+        requisicao: requisicao que causou o erro.
+        excecao: ValueError levantado pela validacao ou pelos algoritmos.
+
+    Retorno:
+        JSONResponse 400 com {"erro": mensagem}.
+
+    Complexidade:
+        O(1).
+    """
+    return JSONResponse(status_code=400, content={"erro": str(excecao)})
 
 
 def _decodificar_imagem(dados: bytes) -> np.ndarray:
@@ -157,11 +213,13 @@ async def enviar_imagem(arquivo: UploadFile = File(...)) -> RespostaUpload:
     Complexidade:
         O(H * W).
     """
+    inicio = time.perf_counter()
     dados = await arquivo.read()
     if len(dados) > TAMANHO_MAXIMO_UPLOAD:
         raise HTTPException(status_code=413, detail="arquivo acima de 10 MB")
     imagem = limitar_resolucao(_decodificar_imagem(dados))
     identificador = sessao.registrar(imagem)
+    _registrar_log("upload", identificador, inicio)
     return RespostaUpload(id=identificador, largura=imagem.shape[1], altura=imagem.shape[0])
 
 
@@ -182,8 +240,11 @@ def obter_imagem(identificador: str) -> Response:
     Complexidade:
         O(H * W).
     """
+    inicio = time.perf_counter()
     imagem = sessao.obter(identificador)
-    return Response(content=_codificar_png(imagem), media_type="image/png")
+    resposta = Response(content=_codificar_png(imagem), media_type="image/png")
+    _registrar_log("obter_imagem", identificador, inicio)
+    return resposta
 
 
 @app.get(
@@ -209,9 +270,12 @@ def obter_mapa_energia(identificador: str, operador: str = "dual") -> Response:
     Complexidade:
         O(H * W).
     """
+    inicio = time.perf_counter()
     imagem = sessao.obter(identificador)
     mapa = energia_para_imagem(calcular_energia(imagem, operador))
-    return Response(content=_codificar_png(mapa[:, :, None].repeat(3, axis=2)), media_type="image/png")
+    resposta = Response(content=_codificar_png(mapa[:, :, None].repeat(3, axis=2)), media_type="image/png")
+    _registrar_log("energia", identificador, inicio)
+    return resposta
 
 
 @app.get(
@@ -235,11 +299,13 @@ def obter_seam(identificador: str, orientacao: str = "vertical", operador: str =
     Complexidade:
         O(H * W).
     """
+    inicio = time.perf_counter()
     if orientacao != "vertical":
         raise ValueError("orientacao invalida: apenas 'vertical' e suportada")
     imagem = sessao.obter(identificador)
     energia = calcular_energia(imagem, operador)
     seam = encontrar_seam_vertical(energia)
+    _registrar_log("seam", identificador, inicio)
     return RespostaSeam(seam=seam, custo=custo_do_seam(energia, seam), orientacao=orientacao)
 
 
@@ -272,6 +338,7 @@ def redimensionar(requisicao: RequisicaoRedimensionar) -> RespostaRedimensionar:
         raise ValueError("largura_alvo maior que a largura original")
     quantidade = largura_atual - requisicao.largura_alvo
     resultado, costuras = reduzir_largura(imagem, quantidade, requisicao.operador)
+    _registrar_log("redimensionar", requisicao.id, inicio)
     return RespostaRedimensionar(
         imagem_base64=base64.b64encode(_codificar_png(resultado)).decode("ascii"),
         largura=resultado.shape[1],
