@@ -58,11 +58,35 @@
                 <button id="botao-aplicar" type="button" class="botao-principal">Aplicar</button>
                 <button id="botao-restaurar" type="button">Restaurar original</button>
             </div>
+
+            <h2 class="titulo-secao">Pinceis</h2>
+
+            <label class="rotulo" for="seletor-pincel">Modo do pincel</label>
+            <select id="seletor-pincel">
+                <option value="nenhum">Nenhum</option>
+                <option value="remover">Remover (vermelho)</option>
+                <option value="proteger">Proteger (verde)</option>
+            </select>
+
+            <label class="rotulo" for="seletor-raio">Raio do pincel</label>
+            <select id="seletor-raio">
+                <option value="4">4 pixels</option>
+                <option value="8" selected>8 pixels</option>
+                <option value="16">16 pixels</option>
+            </select>
+
+            <div class="linha-botoes">
+                <button id="botao-limpar-pinceis" type="button">Limpar pinceis</button>
+                <button id="botao-remover-objeto" type="button" class="botao-principal">Remover objeto</button>
+            </div>
         </aside>
 
         <section class="area-central">
             <div class="moldura-canvas">
-                <canvas id="canvas-principal" width="0" height="0"></canvas>
+                <div class="pilha-canvas">
+                    <canvas id="canvas-principal" width="0" height="0"></canvas>
+                    <canvas id="canvas-pinceis" width="0" height="0"></canvas>
+                </div>
                 <div id="overlay-carregando" class="overlay-carregando" hidden>
                     <div class="spinner"></div>
                     <p>Processando...</p>

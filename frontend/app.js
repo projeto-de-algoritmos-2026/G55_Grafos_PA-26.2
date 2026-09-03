@@ -28,6 +28,11 @@ const refs = {
     botaoAplicar: document.getElementById("botao-aplicar"),
     botaoRestaurar: document.getElementById("botao-restaurar"),
     canvas: document.getElementById("canvas-principal"),
+    canvasPinceis: document.getElementById("canvas-pinceis"),
+    seletorPincel: document.getElementById("seletor-pincel"),
+    seletorRaio: document.getElementById("seletor-raio"),
+    botaoLimparPinceis: document.getElementById("botao-limpar-pinceis"),
+    botaoRemoverObjeto: document.getElementById("botao-remover-objeto"),
     overlayCarregando: document.getElementById("overlay-carregando"),
     rodapeDimensoes: document.getElementById("rodape-dimensoes"),
     rodapeTempo: document.getElementById("rodape-tempo"),
@@ -38,6 +43,12 @@ const refs = {
 };
 
 const contexto = refs.canvas.getContext("2d");
+const contextoPinceis = refs.canvasPinceis.getContext("2d");
+
+const tracos = {
+    remover: [],
+    proteger: [],
+};
 
 /** Chama a API e lanca Error com a mensagem padronizada em caso de falha. */
 async function api(caminho, opcoes) {
@@ -80,6 +91,10 @@ function definirCarregando(ativo) {
         refs.controleLargura,
         refs.botaoAplicar,
         refs.botaoRestaurar,
+        refs.seletorPincel,
+        refs.seletorRaio,
+        refs.botaoLimparPinceis,
+        refs.botaoRemoverObjeto,
     ];
     controles.forEach((controle) => {
         controle.disabled = ativo;
@@ -99,11 +114,21 @@ async function executar(operacao) {
     }
 }
 
+/** Limpa a camada de pinceis e descarta os pontos registrados. */
+function limparPinceis() {
+    tracos.remover = [];
+    tracos.proteger = [];
+    contextoPinceis.clearRect(0, 0, refs.canvasPinceis.width, refs.canvasPinceis.height);
+}
+
 /** Desenha um blob de imagem no canvas, ajustando as dimensoes. */
 async function desenharBlob(blob) {
     const bitmap = await createImageBitmap(blob);
     refs.canvas.width = bitmap.width;
     refs.canvas.height = bitmap.height;
+    refs.canvasPinceis.width = bitmap.width;
+    refs.canvasPinceis.height = bitmap.height;
+    limparPinceis();
     contexto.drawImage(bitmap, 0, 0);
     bitmap.close();
 }
@@ -298,6 +323,9 @@ function desenharBase64(base64) {
         imagem.onload = () => {
             refs.canvas.width = imagem.width;
             refs.canvas.height = imagem.height;
+            refs.canvasPinceis.width = imagem.width;
+            refs.canvasPinceis.height = imagem.height;
+            limparPinceis();
             contexto.drawImage(imagem, 0, 0);
             resolver();
         };
@@ -373,6 +401,82 @@ function registrarEventosRedimensionar() {
     });
 }
 
+/** Converte a posicao do mouse para coordenadas de pixel da imagem. */
+function posicaoNaImagem(evento) {
+    const retangulo = refs.canvasPinceis.getBoundingClientRect();
+    const x = Math.round(((evento.clientX - retangulo.left) * refs.canvasPinceis.width) / retangulo.width);
+    const y = Math.round(((evento.clientY - retangulo.top) * refs.canvasPinceis.height) / retangulo.height);
+    return [x, y];
+}
+
+/** Registra um ponto do traco e o desenha com transparencia na camada. */
+function pintar(evento) {
+    const modo = refs.seletorPincel.value;
+    const [x, y] = posicaoNaImagem(evento);
+    tracos[modo].push([x, y]);
+    contextoPinceis.globalAlpha = 0.4;
+    contextoPinceis.fillStyle = modo === "remover" ? "#ff2d2d" : "#2dc84d";
+    contextoPinceis.beginPath();
+    contextoPinceis.arc(x, y, Number(refs.seletorRaio.value), 0, Math.PI * 2);
+    contextoPinceis.fill();
+    contextoPinceis.globalAlpha = 1;
+}
+
+/** Envia os tracos ao endpoint de remocao de objeto e exibe o resultado. */
+async function removerObjeto() {
+    const requisicao = {
+        id: estado.id,
+        remover: tracos.remover,
+        proteger: tracos.proteger,
+        raio_pincel: Number(refs.seletorRaio.value),
+        operador: refs.seletorOperador.value,
+    };
+    const resposta = await api("/api/remover-objeto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requisicao),
+    });
+    const dados = await resposta.json();
+    await desenharBase64(dados.imagem_base64);
+    estado.costurasRemovidas = dados.iteracoes;
+    estado.exibindoResultado = true;
+    refs.caixaCostura.checked = false;
+    refs.infoCusto.textContent = "-";
+    atualizarPaineis(dados.tempo_ms);
+}
+
+/** Registra os eventos dos pinceis e dos botoes de remocao de objeto. */
+function registrarEventosPinceis() {
+    let pintando = false;
+    refs.seletorPincel.addEventListener("change", () => {
+        refs.canvasPinceis.classList.toggle("pincel-ativo", refs.seletorPincel.value !== "nenhum");
+    });
+    refs.canvasPinceis.addEventListener("mousedown", (evento) => {
+        if (estado.id && refs.seletorPincel.value !== "nenhum") {
+            pintando = true;
+            pintar(evento);
+        }
+    });
+    refs.canvasPinceis.addEventListener("mousemove", (evento) => {
+        if (pintando) {
+            pintar(evento);
+        }
+    });
+    ["mouseup", "mouseleave"].forEach((nome) => {
+        refs.canvasPinceis.addEventListener(nome, () => {
+            pintando = false;
+        });
+    });
+    refs.botaoLimparPinceis.addEventListener("click", limparPinceis);
+    refs.botaoRemoverObjeto.addEventListener("click", () => {
+        if (estado.id && tracos.remover.length > 0) {
+            executar(removerObjeto);
+        } else if (estado.id) {
+            mostrarErro("pinte a regiao a remover com o pincel vermelho antes");
+        }
+    });
+}
+
 /** Registra o evento da caixa de exibicao da costura. */
 function registrarEventosCostura() {
     refs.caixaCostura.addEventListener("change", () => {
@@ -386,4 +490,5 @@ registrarEventosUpload();
 registrarEventosCamada();
 registrarEventosCostura();
 registrarEventosRedimensionar();
+registrarEventosPinceis();
 atualizarPaineis();
