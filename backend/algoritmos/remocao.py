@@ -99,3 +99,41 @@ def reduzir_largura(
         if progresso is not None:
             progresso(indice + 1, quantidade)
     return imagem_atual, costuras
+
+
+def reduzir_altura(
+    imagem: np.ndarray,
+    quantidade: int,
+    operador: str = "dual",
+    progresso: Optional[Callable[[int, int], None]] = None,
+) -> tuple[np.ndarray, list[list[int]]]:
+    """Remove costuras horizontais reutilizando a reducao de largura.
+
+    Implementacao por transposicao: os dois primeiros eixos sao trocados,
+    reduzir_largura e aplicada e o resultado e transposto de volta. A
+    escolha e correta porque uma costura horizontal da imagem original
+    (um pixel por coluna, com passos de no maximo 1 entre colunas
+    vizinhas) corresponde exatamente a uma costura vertical da imagem
+    transposta, e os operadores de energia sao simetricos a transposicao
+    dos eixos espaciais: transpor a imagem transpoe o mapa de energia.
+
+    Parametros:
+        imagem: array de formato (H, W, 3).
+        quantidade: numero de costuras horizontais a remover.
+        operador: nome do operador de energia ("dual" ou "sobel").
+        progresso: funcao opcional chamada apos cada remocao com os
+            argumentos (removidas, total).
+
+    Retorno:
+        Tupla com a imagem final de formato (H - quantidade, W, 3) e a
+        lista das costuras removidas em coordenadas da transposta: o
+        elemento x de cada costura e a linha ocupada na coluna x.
+        Levanta ValueError se quantidade for negativa ou maior ou igual
+        a altura atual.
+
+    Complexidade:
+        O(k * H * W), onde k e a quantidade de costuras.
+    """
+    transposta = np.transpose(np.asarray(imagem, dtype=np.float64), (1, 0, 2))
+    reduzida, costuras = reduzir_largura(transposta, quantidade, operador, progresso)
+    return np.transpose(reduzida, (1, 0, 2)), costuras
