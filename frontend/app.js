@@ -273,6 +273,88 @@ function registrarEventosCamada() {
     });
 }
 
+/** Desenha uma imagem em base64 no canvas e retorna quando concluir. */
+function desenharBase64(base64) {
+    return new Promise((resolver, rejeitar) => {
+        const imagem = new Image();
+        imagem.onload = () => {
+            refs.canvas.width = imagem.width;
+            refs.canvas.height = imagem.height;
+            contexto.drawImage(imagem, 0, 0);
+            resolver();
+        };
+        imagem.onerror = () => rejeitar(new Error("falha ao decodificar a imagem recebida"));
+        imagem.src = `data:image/png;base64,${base64}`;
+    });
+}
+
+/** Aplica o redimensionamento para a largura indicada pelo controle. */
+async function aplicarRedimensionamento() {
+    if (!estado.id) {
+        return;
+    }
+    const percentual = Number(refs.controleLargura.value);
+    const larguraAlvo = Math.max(2, Math.round((estado.largura * percentual) / 100));
+    if (larguraAlvo === estado.largura) {
+        await atualizarExibicao();
+        return;
+    }
+    const resposta = await api("/api/redimensionar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: estado.id, largura_alvo: larguraAlvo, operador: refs.seletorOperador.value }),
+    });
+    const dados = await resposta.json();
+    await desenharBase64(dados.imagem_base64);
+    estado.costurasRemovidas = dados.costuras_removidas;
+    estado.exibindoResultado = true;
+    refs.seletorCamada.value = "original";
+    refs.caixaCostura.checked = false;
+    refs.infoCusto.textContent = "-";
+    atualizarPaineis(dados.tempo_ms);
+}
+
+let temporizadorDebounce = null;
+
+/** Agenda o redimensionamento com debounce de 300 ms (decisao documentada). */
+function agendarRedimensionamento() {
+    clearTimeout(temporizadorDebounce);
+    temporizadorDebounce = setTimeout(() => executar(aplicarRedimensionamento), 300);
+}
+
+/** Restaura a exibicao da imagem original e reseta os controles. */
+async function restaurarOriginal() {
+    clearTimeout(temporizadorDebounce);
+    refs.controleLargura.value = "100";
+    refs.valorLargura.textContent = "100";
+    estado.costurasRemovidas = 0;
+    refs.seletorCamada.value = "original";
+    refs.caixaCostura.checked = false;
+    refs.rodapeTempo.textContent = "";
+    await atualizarExibicao();
+}
+
+/** Registra os eventos do controle de largura e dos botoes de acao. */
+function registrarEventosRedimensionar() {
+    refs.controleLargura.addEventListener("input", () => {
+        refs.valorLargura.textContent = refs.controleLargura.value;
+        if (estado.id) {
+            agendarRedimensionamento();
+        }
+    });
+    refs.botaoAplicar.addEventListener("click", () => {
+        clearTimeout(temporizadorDebounce);
+        if (estado.id) {
+            executar(aplicarRedimensionamento);
+        }
+    });
+    refs.botaoRestaurar.addEventListener("click", () => {
+        if (estado.id) {
+            executar(restaurarOriginal);
+        }
+    });
+}
+
 /** Registra o evento da caixa de exibicao da costura. */
 function registrarEventosCostura() {
     refs.caixaCostura.addEventListener("change", () => {
@@ -285,4 +367,5 @@ function registrarEventosCostura() {
 registrarEventosUpload();
 registrarEventosCamada();
 registrarEventosCostura();
+registrarEventosRedimensionar();
 atualizarPaineis();
