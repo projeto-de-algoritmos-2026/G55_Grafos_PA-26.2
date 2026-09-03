@@ -4,7 +4,9 @@ Define a instancia FastAPI, os endpoints da API, a configuracao de CORS
 e o servico de arquivos estaticos do frontend.
 """
 
+import base64
 import io
+import time
 from pathlib import Path
 from typing import Dict
 
@@ -17,6 +19,7 @@ from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
 
 from backend.algoritmos.energia import calcular_energia, energia_para_imagem
+from backend.algoritmos.remocao import reduzir_largura
 from backend.algoritmos.seam_dp import custo_do_seam, encontrar_seam_vertical
 from backend.utils.imagem import limitar_resolucao
 from backend.utils.sessao import sessao
@@ -58,6 +61,24 @@ class RespostaSeam(BaseModel):
     seam: list[int]
     custo: float
     orientacao: str
+
+
+class RequisicaoRedimensionar(BaseModel):
+    """Corpo da requisicao de redimensionamento."""
+
+    id: str
+    largura_alvo: int
+    operador: str = "dual"
+
+
+class RespostaRedimensionar(BaseModel):
+    """Resposta do redimensionamento por seam carving."""
+
+    imagem_base64: str
+    largura: int
+    altura: int
+    costuras_removidas: int
+    tempo_ms: float
 
 
 def _decodificar_imagem(dados: bytes) -> np.ndarray:
@@ -220,6 +241,44 @@ def obter_seam(identificador: str, orientacao: str = "vertical", operador: str =
     energia = calcular_energia(imagem, operador)
     seam = encontrar_seam_vertical(energia)
     return RespostaSeam(seam=seam, custo=custo_do_seam(energia, seam), orientacao=orientacao)
+
+
+@app.post(
+    "/api/redimensionar",
+    response_model=RespostaRedimensionar,
+    responses={400: {"model": RespostaErro}, 404: {"model": RespostaErro}},
+)
+def redimensionar(requisicao: RequisicaoRedimensionar) -> RespostaRedimensionar:
+    """Reduz a largura da imagem removendo costuras de menor energia.
+
+    Parametros:
+        requisicao: id da imagem, largura alvo e operador de energia.
+
+    Retorno:
+        RespostaRedimensionar com o PNG em base64 (sem prefixo data:),
+        dimensoes finais, numero de costuras removidas e tempo em ms.
+        Erro 400 se a largura alvo for invalida (menor que 2 ou maior
+        que a original) e 404 se o id nao existir.
+
+    Complexidade:
+        O(k * H * W), onde k e o numero de costuras removidas.
+    """
+    inicio = time.perf_counter()
+    imagem = sessao.obter(requisicao.id)
+    largura_atual = imagem.shape[1]
+    if requisicao.largura_alvo < 2:
+        raise ValueError("largura_alvo reduziria a imagem a menos de 2 colunas")
+    if requisicao.largura_alvo > largura_atual:
+        raise ValueError("largura_alvo maior que a largura original")
+    quantidade = largura_atual - requisicao.largura_alvo
+    resultado, costuras = reduzir_largura(imagem, quantidade, requisicao.operador)
+    return RespostaRedimensionar(
+        imagem_base64=base64.b64encode(_codificar_png(resultado)).decode("ascii"),
+        largura=resultado.shape[1],
+        altura=resultado.shape[0],
+        costuras_removidas=len(costuras),
+        tempo_ms=(time.perf_counter() - inicio) * 1000.0,
+    )
 
 
 app.mount("/", StaticFiles(directory=DIRETORIO_FRONTEND, html=True), name="frontend")
