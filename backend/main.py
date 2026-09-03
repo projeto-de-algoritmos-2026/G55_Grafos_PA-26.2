@@ -16,6 +16,8 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
 
+from backend.algoritmos.energia import calcular_energia, energia_para_imagem
+from backend.algoritmos.seam_dp import custo_do_seam, encontrar_seam_vertical
 from backend.utils.imagem import limitar_resolucao
 from backend.utils.sessao import sessao
 
@@ -48,6 +50,14 @@ class RespostaUpload(BaseModel):
     id: str
     largura: int
     altura: int
+
+
+class RespostaSeam(BaseModel):
+    """Resposta da busca da costura de menor energia."""
+
+    seam: list[int]
+    custo: float
+    orientacao: str
 
 
 def _decodificar_imagem(dados: bytes) -> np.ndarray:
@@ -153,6 +163,63 @@ def obter_imagem(identificador: str) -> Response:
     """
     imagem = sessao.obter(identificador)
     return Response(content=_codificar_png(imagem), media_type="image/png")
+
+
+@app.get(
+    "/api/energia/{identificador}",
+    response_class=Response,
+    responses={
+        200: {"content": {"image/png": {}}},
+        400: {"model": RespostaErro},
+        404: {"model": RespostaErro},
+    },
+)
+def obter_mapa_energia(identificador: str, operador: str = "dual") -> Response:
+    """Devolve o mapa de energia da imagem como PNG em tons de cinza.
+
+    Parametros:
+        identificador: id retornado pelo upload.
+        operador: operador de energia ("dual" ou "sobel").
+
+    Retorno:
+        Resposta image/png com o mapa normalizado. Erro 400 para operador
+        invalido e 404 se o id nao existir.
+
+    Complexidade:
+        O(H * W).
+    """
+    imagem = sessao.obter(identificador)
+    mapa = energia_para_imagem(calcular_energia(imagem, operador))
+    return Response(content=_codificar_png(mapa[:, :, None].repeat(3, axis=2)), media_type="image/png")
+
+
+@app.get(
+    "/api/seam/{identificador}",
+    response_model=RespostaSeam,
+    responses={400: {"model": RespostaErro}, 404: {"model": RespostaErro}},
+)
+def obter_seam(identificador: str, orientacao: str = "vertical", operador: str = "dual") -> RespostaSeam:
+    """Calcula a costura de menor energia da imagem.
+
+    Parametros:
+        identificador: id retornado pelo upload.
+        orientacao: orientacao da costura; apenas "vertical" e suportada.
+        operador: operador de energia ("dual" ou "sobel").
+
+    Retorno:
+        RespostaSeam com as colunas da costura, o custo total e a
+        orientacao. Erro 400 para orientacao ou operador invalidos e
+        404 se o id nao existir.
+
+    Complexidade:
+        O(H * W).
+    """
+    if orientacao != "vertical":
+        raise ValueError("orientacao invalida: apenas 'vertical' e suportada")
+    imagem = sessao.obter(identificador)
+    energia = calcular_energia(imagem, operador)
+    seam = encontrar_seam_vertical(energia)
+    return RespostaSeam(seam=seam, custo=custo_do_seam(energia, seam), orientacao=orientacao)
 
 
 app.mount("/", StaticFiles(directory=DIRETORIO_FRONTEND, html=True), name="frontend")
