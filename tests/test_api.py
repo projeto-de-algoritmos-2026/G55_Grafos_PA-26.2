@@ -121,6 +121,31 @@ def test_redimensionar_reduz_largura() -> None:
     assert Image.open(io.BytesIO(png)).size == (20, 20)
 
 
+def test_redimensionar_altura_via_api() -> None:
+    """Reduzir apenas a altura preserva a largura."""
+    corpo = _enviar_imagem(altura=25, largura=15)
+    requisicao = {"id": corpo["id"], "altura_alvo": 20, "operador": "dual"}
+    resposta = cliente.post("/api/redimensionar", json=requisicao)
+    assert resposta.status_code == 200
+    dados = resposta.json()
+    assert dados["altura"] == 20
+    assert dados["largura"] == 15
+    assert dados["costuras_removidas"] == 5
+
+
+def test_redimensionar_ambos_os_eixos_com_ampliacao() -> None:
+    """Reduzir a largura e ampliar a altura na mesma requisicao."""
+    corpo = _enviar_imagem(altura=18, largura=22)
+    requisicao = {"id": corpo["id"], "largura_alvo": 16, "altura_alvo": 21, "operador": "dual"}
+    resposta = cliente.post("/api/redimensionar", json=requisicao)
+    assert resposta.status_code == 200
+    dados = resposta.json()
+    assert (dados["largura"], dados["altura"]) == (16, 21)
+    assert dados["costuras_removidas"] == 9
+    png = base64.b64decode(dados["imagem_base64"])
+    assert Image.open(io.BytesIO(png)).size == (16, 21)
+
+
 def test_redimensionar_com_largura_maior_retorna_400() -> None:
     """largura_alvo maior que a original retorna 400."""
     corpo = _enviar_imagem(altura=10, largura=12)
