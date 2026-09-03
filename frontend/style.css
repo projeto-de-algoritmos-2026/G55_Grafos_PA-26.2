@@ -16,6 +16,11 @@
     box-sizing: border-box;
 }
 
+/* Garante que [hidden] vence regras de display declaradas nas classes. */
+[hidden] {
+    display: none !important;
+}
+
 body {
     margin: 0;
     height: 100vh;
