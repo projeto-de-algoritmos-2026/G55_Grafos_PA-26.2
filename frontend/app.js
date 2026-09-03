@@ -117,11 +117,26 @@ async function obterBlobCamada(camada, operador) {
     return cacheCamadas.get(chave);
 }
 
-/** Desenha a camada selecionada da imagem original, sem novo upload. */
+/** Busca a costura de menor energia e a desenha em vermelho, pixel a pixel. */
+async function desenharCostura() {
+    const operador = refs.seletorOperador.value;
+    const resposta = await api(`/api/seam/${estado.id}?orientacao=vertical&operador=${operador}`);
+    const dados = await resposta.json();
+    contexto.fillStyle = "#ff2d2d";
+    dados.seam.forEach((coluna, linha) => contexto.fillRect(coluna, linha, 1, 1));
+    refs.infoCusto.textContent = dados.custo.toFixed(1);
+}
+
+/** Desenha a camada selecionada e, se ativa, a costura por cima. */
 async function atualizarExibicao() {
     estado.exibindoResultado = false;
     const blob = await obterBlobCamada(refs.seletorCamada.value, refs.seletorOperador.value);
     await desenharBlob(blob);
+    if (refs.caixaCostura.checked) {
+        await desenharCostura();
+    } else {
+        refs.infoCusto.textContent = "-";
+    }
     atualizarPaineis();
 }
 
@@ -258,6 +273,16 @@ function registrarEventosCamada() {
     });
 }
 
+/** Registra o evento da caixa de exibicao da costura. */
+function registrarEventosCostura() {
+    refs.caixaCostura.addEventListener("change", () => {
+        if (estado.id) {
+            executar(atualizarExibicao);
+        }
+    });
+}
+
 registrarEventosUpload();
 registrarEventosCamada();
+registrarEventosCostura();
 atualizarPaineis();
