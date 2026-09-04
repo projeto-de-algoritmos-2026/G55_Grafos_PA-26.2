@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from backend.algoritmos.seam_dijkstra import encontrar_seam_dijkstra
 from backend.algoritmos.seam_dp import construir_tabela_custo, custo_do_seam, encontrar_seam_vertical, validar_seam
 
 
@@ -55,3 +56,18 @@ def test_otimalidade_contra_forca_bruta() -> None:
         energia = gerador.integers(0, 100, size=(5, 5)).astype(float)
         minimo = min(custo_do_seam(energia, seam) for coluna in range(5) for seam in _todos_seams(energia, 0, coluna, []))
         assert custo_do_seam(energia, encontrar_seam_vertical(energia)) == minimo
+
+
+def test_dijkstra_tem_mesmo_custo_da_programacao_dinamica() -> None:
+    gerador = np.random.default_rng(26)
+    for _ in range(15):
+        altura = int(gerador.integers(5, 41))
+        largura = int(gerador.integers(5, 41))
+        energia = gerador.random((altura, largura))
+        seam_dp = encontrar_seam_vertical(energia)
+        seam_dijkstra, metricas = encontrar_seam_dijkstra(energia)
+        assert custo_do_seam(energia, seam_dijkstra) == custo_do_seam(energia, seam_dp)
+        assert validar_seam(seam_dijkstra, altura, largura)
+        assert metricas["vertices_visitados"] > 0
+        assert metricas["operacoes_heap"] > 0
+        assert metricas["tempo_ms"] >= 0
