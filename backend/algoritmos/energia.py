@@ -157,3 +157,44 @@ def calcular_energia(imagem: np.ndarray, operador: str = "dual") -> np.ndarray:
         validos = ", ".join(sorted(_OPERADORES))
         raise ValueError(f"operador desconhecido: {operador!r}. Validos: {validos}")
     return _OPERADORES[operador](imagem)
+
+
+def calcular_energia_faixa(
+    imagem: np.ndarray,
+    faixas: list[tuple[int, int]],
+    operador: str = "dual",
+) -> np.ndarray:
+    """Calcula a energia apenas nas faixas indicadas de cada linha.
+
+    As faixas usam intervalo semiaberto ``[inicio, fim)`` e o restante do
+    resultado fica com zero. O calculo consulta somente a vizinhanca local
+    de cada pixel, mantendo o wrap-around dos operadores completos.
+
+    Complexidade:
+        O(H * B), onde B e a largura media das faixas.
+    """
+    _validar_imagem(imagem)
+    if operador not in _OPERADORES:
+        validos = ", ".join(sorted(_OPERADORES))
+        raise ValueError(f"operador desconhecido: {operador!r}. Validos: {validos}")
+    imagem = np.asarray(imagem, dtype=np.float64)
+    altura, largura = imagem.shape[:2]
+    resultado = np.zeros((altura, largura), dtype=np.float64)
+    kernel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float64)
+    kernel_y = kernel_x.T
+    for linha, (inicio, fim) in enumerate(faixas):
+        for coluna in range(max(0, inicio), min(largura, fim)):
+            if operador == "dual":
+                dx = imagem[linha, (coluna + 1) % largura] - imagem[linha, (coluna - 1) % largura]
+                dy = imagem[(linha + 1) % altura, coluna] - imagem[(linha - 1) % altura, coluna]
+                resultado[linha, coluna] = np.sum(dx * dx) + np.sum(dy * dy)
+            else:
+                gx = np.zeros(3, dtype=np.float64)
+                gy = np.zeros(3, dtype=np.float64)
+                for desloc_y in (-1, 0, 1):
+                    for desloc_x in (-1, 0, 1):
+                        pixel = imagem[(linha + desloc_y) % altura, (coluna + desloc_x) % largura]
+                        gx += kernel_x[desloc_y + 1, desloc_x + 1] * pixel
+                        gy += kernel_y[desloc_y + 1, desloc_x + 1] * pixel
+                resultado[linha, coluna] = np.sum(np.sqrt(gx * gx + gy * gy))
+    return resultado

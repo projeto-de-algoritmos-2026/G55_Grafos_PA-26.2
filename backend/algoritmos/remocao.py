@@ -4,7 +4,7 @@ from typing import Callable, Optional
 
 import numpy as np
 
-from .energia import calcular_energia
+from .energia import calcular_energia, calcular_energia_faixa
 from .seam_dp import encontrar_seam_vertical
 
 # Valores finitos grandes em vez de infinito: somar infinito na recorrencia
@@ -136,6 +136,46 @@ def reduzir_largura(
         seam = encontrar_seam_vertical(energia)
         costuras.append(seam)
         imagem_atual = remover_seam_vertical(imagem_atual, seam)
+        if progresso is not None:
+            progresso(indice + 1, quantidade)
+    return imagem_atual, costuras
+
+
+def reduzir_largura_otimizado(
+    imagem: np.ndarray,
+    quantidade: int,
+    operador: str = "dual",
+    progresso: Optional[Callable[[int, int], None]] = None,
+) -> tuple[np.ndarray, list[list[int]]]:
+    """Reduz a largura recalculando apenas a faixa afetada pela costura.
+
+    A energia de um pixel depende dos vizinhos imediatos. Depois da remocao,
+    a energia pode mudar apenas perto da coluna removida; por isso a faixa
+    recalculada em cada linha vai de ``seam[y] - 2`` ate ``seam[y] + 1``
+    na imagem ja reduzida, limitada aos bounds validos. A margem de 2 cobre
+    os vizinhos horizontais e verticais impactados pelo deslocamento da
+    coluna removida.
+    """
+    imagem_atual = np.asarray(imagem, dtype=np.float64)
+    if quantidade < 0 or quantidade >= imagem_atual.shape[1]:
+        raise ValueError("quantidade deve ser menor que a largura atual")
+    energia = _energia_para_tamanho_pequeno(imagem_atual, operador)
+    costuras = []
+    for indice in range(quantidade):
+        seam = encontrar_seam_vertical(energia)
+        costuras.append(seam)
+        imagem_atual = remover_seam_vertical(imagem_atual, seam)
+        energia = remover_seam_vertical(energia[:, :, None], seam)[:, :, 0]
+        colunas_afetadas = []
+        for linha in range(len(seam)):
+            colunas_afetadas.extend(seam[max(0, linha - 1):min(len(seam), linha + 2)])
+        inicio = min(colunas_afetadas) - 2
+        fim = max(colunas_afetadas) + 3
+        faixas = [(inicio, fim)] * imagem_atual.shape[0]
+        faixa_atualizada = calcular_energia_faixa(imagem_atual, faixas, operador)
+        inicio_valido = max(0, inicio)
+        fim_valido = min(imagem_atual.shape[1], fim)
+        energia[:, inicio_valido:fim_valido] = faixa_atualizada[:, inicio_valido:fim_valido]
         if progresso is not None:
             progresso(indice + 1, quantidade)
     return imagem_atual, costuras

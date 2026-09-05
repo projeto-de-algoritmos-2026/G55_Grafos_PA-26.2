@@ -11,6 +11,7 @@ from backend.algoritmos.remocao import (
     aplicar_mascara,
     reduzir_altura,
     reduzir_largura,
+    reduzir_largura_otimizado,
     remover_objeto,
     remover_seam_vertical,
 )
@@ -30,6 +31,17 @@ def test_reduzir_largura_remove_quantidade() -> None:
     resultado, costuras = reduzir_largura(imagem, 3)
     assert resultado.shape == (6, 5, 3)
     assert len(costuras) == 3
+
+
+def test_reduzir_largura_otimizado_e_identico_a_referencia() -> None:
+    gerador = np.random.default_rng(26)
+    for _ in range(10):
+        altura = int(gerador.integers(5, 16))
+        largura = int(gerador.integers(7, 20))
+        imagem = gerador.uniform(0.0, 255.0, size=(altura, largura, 3))
+        esperado, _ = reduzir_largura(imagem, 3, "dual")
+        resultado, _ = reduzir_largura_otimizado(imagem, 3, "dual")
+        np.testing.assert_array_equal(resultado, esperado)
 
 
 def test_quantidade_igual_a_largura_e_invalida() -> None:
