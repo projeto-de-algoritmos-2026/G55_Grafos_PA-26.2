@@ -40,6 +40,8 @@ const refs = {
     infoDimensoes: document.getElementById("info-dimensoes"),
     infoCosturas: document.getElementById("info-costuras"),
     infoCusto: document.getElementById("info-custo"),
+    botaoBenchmark: document.getElementById("botao-benchmark"),
+    tabelaBenchmark: document.getElementById("tabela-benchmark"),
 };
 
 const contexto = refs.canvas.getContext("2d");
@@ -143,6 +145,28 @@ function atualizarPaineis(tempoMs) {
     refs.infoId.textContent = temImagem ? estado.id : "-";
     refs.infoDimensoes.textContent = temImagem ? `${refs.canvas.width} x ${refs.canvas.height}` : "-";
     refs.infoCosturas.textContent = String(estado.costurasRemovidas);
+}
+
+/** Busca as metricas e renderiza barras proporcionais ao tempo. */
+async function executarBenchmark() {
+    if (!estado.id) {
+        return;
+    }
+    const resposta = await api(`/api/benchmark/${estado.id}?costuras=50&operador=${refs.seletorOperador.value}`);
+    const dados = await resposta.json();
+    const variantes = [
+        ["DP", dados.dp],
+        ["DP otimizado", dados.dp_otimizado],
+        ["Dijkstra", dados.dijkstra],
+    ];
+    const maiorTempo = Math.max(...variantes.map(([, metrica]) => metrica.tempo_ms), 1);
+    refs.tabelaBenchmark.innerHTML = variantes.map(([nome, metrica]) => `
+        <div class="linha-benchmark">
+            <span>${nome}</span>
+            <div class="barra-benchmark"><i style="width: ${(metrica.tempo_ms / maiorTempo) * 100}%"></i></div>
+            <strong>${metrica.tempo_ms.toFixed(1)} ms</strong>
+        </div>`).join("");
+    refs.tabelaBenchmark.hidden = false;
 }
 
 const cacheCamadas = new Map();
@@ -491,4 +515,5 @@ registrarEventosCamada();
 registrarEventosCostura();
 registrarEventosRedimensionar();
 registrarEventosPinceis();
+refs.botaoBenchmark.addEventListener("click", () => executar(executarBenchmark));
 atualizarPaineis();

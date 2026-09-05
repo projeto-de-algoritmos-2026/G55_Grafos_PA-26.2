@@ -165,12 +165,17 @@ def reduzir_largura_otimizado(
         seam = encontrar_seam_vertical(energia)
         costuras.append(seam)
         imagem_atual = remover_seam_vertical(imagem_atual, seam)
+        if operador == "sobel":
+            energia = _energia_para_tamanho_pequeno(imagem_atual, operador)
+            if progresso is not None:
+                progresso(indice + 1, quantidade)
+            continue
         energia = remover_seam_vertical(energia[:, :, None], seam)[:, :, 0]
         colunas_afetadas = []
         for linha in range(len(seam)):
-            colunas_afetadas.extend(seam[max(0, linha - 1):min(len(seam), linha + 2)])
-        inicio = min(colunas_afetadas) - 2
-        fim = max(colunas_afetadas) + 3
+            colunas_afetadas.extend(seam[max(0, linha - 2):min(len(seam), linha + 3)])
+        inicio = min(colunas_afetadas) - 3
+        fim = max(colunas_afetadas) + 4
         faixas = [(inicio, fim)] * imagem_atual.shape[0]
         faixa_atualizada = calcular_energia_faixa(imagem_atual, faixas, operador)
         inicio_valido = max(0, inicio)
