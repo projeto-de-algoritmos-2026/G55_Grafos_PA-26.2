@@ -155,6 +155,9 @@ def reduzir_largura_otimizado(
     na imagem ja reduzida, limitada aos bounds validos. A margem de 2 cobre
     os vizinhos horizontais e verticais impactados pelo deslocamento da
     coluna removida.
+
+    Complexidade:
+        O(k * H * W), onde k e a quantidade de costuras.
     """
     imagem_atual = np.asarray(imagem, dtype=np.float64)
     if quantidade < 0 or quantidade >= imagem_atual.shape[1]:

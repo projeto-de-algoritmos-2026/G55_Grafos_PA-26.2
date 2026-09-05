@@ -497,7 +497,11 @@ def redimensionar(requisicao: RequisicaoRedimensionar) -> RespostaRedimensionar:
     responses={400: {"model": RespostaErro}, 404: {"model": RespostaErro}},
 )
 def benchmark(identificador: str, costuras: int = 50, operador: str = "dual") -> RespostaBenchmark:
-    """Compara DP, reducao otimizada e Dijkstra sobre a mesma imagem."""
+    """Compara DP, reducao otimizada e Dijkstra sobre a mesma imagem.
+
+    Complexidade:
+        O(k * H * W log(H * W)), dominada pela variante com Dijkstra.
+    """
     if costuras < 1:
         raise ValueError("costuras deve ser positiva")
     imagem = sessao.obter(identificador)
@@ -506,6 +510,11 @@ def benchmark(identificador: str, costuras: int = 50, operador: str = "dual") ->
         raise ValueError("a imagem deve ter pelo menos 3 colunas")
 
     def executar(algoritmo):
+        """Executa uma variante e mede sua duracao.
+
+        Complexidade:
+            O(k * H * W), conforme a variante recebida.
+        """
         inicio = time.perf_counter()
         resultado, _ = algoritmo(imagem, costuras, operador)
         return resultado, (time.perf_counter() - inicio) * 1000.0
@@ -567,6 +576,11 @@ def remover_objeto_api(requisicao: RequisicaoRemoverObjeto) -> RespostaRemoverOb
     iteracoes = [0]
 
     def contar(iteracao: int, total: int) -> None:
+        """Atualiza o contador de iteracoes do algoritmo de remocao.
+
+        Complexidade:
+            O(1).
+        """
         iteracoes[0] = iteracao
 
     resultado = remover_objeto(imagem, mascara_remover, mascara_proteger, requisicao.operador, contar)

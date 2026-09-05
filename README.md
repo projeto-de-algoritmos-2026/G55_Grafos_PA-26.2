@@ -28,9 +28,9 @@ Dada uma imagem de dimensões `W x H` e uma dimensão alvo `W' x H'`, encontrar 
 | Elemento | Representação |
 | -- | -- |
 | **Vértice** | Cada pixel `(x, y)` da imagem |
-| **Aresta** | De `(x, y)` para `(x-1, y+1)`, `(x, y+1)` e `(x+1, y+1)` — os três vizinhos da linha inferior |
+| **Aresta** | De `(x, y)` para `(x-1, y+1)`, `(x, y+1)` e `(x+1, y+1)`: os três vizinhos da linha inferior |
 | **Peso** | Energia do pixel de destino, calculada pelo gradiente dual RGB |
-| **Tipo** | Direcionado, ponderado e **acíclico (DAG)** — todas as arestas apontam para baixo |
+| **Tipo** | Direcionado, ponderado e **acíclico (DAG)**: todas as arestas apontam para baixo |
 | **Ordem topológica** | Trivial: a própria ordem das linhas da imagem (`y = 0, 1, 2, ..., H-1`) |
 
 Para costuras horizontais, a imagem é transposta e o mesmo grafo é reconstruído sobre as colunas.
