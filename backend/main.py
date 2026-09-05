@@ -26,9 +26,13 @@ from backend.algoritmos.remocao import (
     ampliar_largura,
     reduzir_altura,
     reduzir_largura,
+    reduzir_largura_otimizado,
     remover_objeto,
+    remover_seam_vertical,
+    _energia_para_tamanho_pequeno,
 )
 from backend.algoritmos.seam_dp import custo_do_seam, encontrar_seam_vertical
+from backend.algoritmos.seam_dijkstra import encontrar_seam_dijkstra
 from backend.utils.imagem import limitar_resolucao
 from backend.utils.sessao import sessao
 
@@ -115,6 +119,24 @@ class RespostaRemoverObjeto(BaseModel):
     altura: int
     iteracoes: int
     tempo_ms: float
+
+
+class MetricasBenchmark(BaseModel):
+    """Metricas de uma variante do benchmark."""
+
+    tempo_ms: float
+    vertices_visitados: int
+    operacoes_heap: Optional[int] = None
+
+
+class RespostaBenchmark(BaseModel):
+    """Comparacao das tres estrategias de busca de costura."""
+
+    dp: MetricasBenchmark
+    dp_otimizado: MetricasBenchmark
+    dijkstra: MetricasBenchmark
+    resultados_identicos: bool
+    dimensoes: dict[str, int]
 
 
 def _registrar_log(operacao: str, identificador: str, inicio: float) -> None:
@@ -466,6 +488,48 @@ def redimensionar(requisicao: RequisicaoRedimensionar) -> RespostaRedimensionar:
         altura=imagem.shape[0],
         costuras_removidas=total_costuras,
         tempo_ms=(time.perf_counter() - inicio) * 1000.0,
+    )
+
+
+@app.get(
+    "/api/benchmark/{identificador}",
+    response_model=RespostaBenchmark,
+    responses={400: {"model": RespostaErro}, 404: {"model": RespostaErro}},
+)
+def benchmark(identificador: str, costuras: int = 50, operador: str = "dual") -> RespostaBenchmark:
+    """Compara DP, reducao otimizada e Dijkstra sobre a mesma imagem."""
+    if costuras < 1:
+        raise ValueError("costuras deve ser positiva")
+    imagem = sessao.obter(identificador)
+    costuras = min(costuras, imagem.shape[1] - 2)
+    if costuras < 1:
+        raise ValueError("a imagem deve ter pelo menos 3 colunas")
+
+    def executar(algoritmo):
+        inicio = time.perf_counter()
+        resultado, _ = algoritmo(imagem, costuras, operador)
+        return resultado, (time.perf_counter() - inicio) * 1000.0
+
+    resultado_dp, tempo_dp = executar(reduzir_largura)
+    resultado_otimizado, tempo_otimizado = executar(reduzir_largura_otimizado)
+    inicio_dijkstra = time.perf_counter()
+    atual = imagem.copy()
+    vertices_dijkstra = 0
+    operacoes_heap = 0
+    for _ in range(costuras):
+        energia = _energia_para_tamanho_pequeno(atual, operador)
+        seam, metricas = encontrar_seam_dijkstra(energia)
+        vertices_dijkstra += metricas["vertices_visitados"]
+        operacoes_heap += metricas["operacoes_heap"]
+        atual = remover_seam_vertical(atual, seam)
+    tempo_dijkstra = (time.perf_counter() - inicio_dijkstra) * 1000.0
+    vertices_dp = sum(max(1, imagem.shape[1] - indice) * imagem.shape[0] for indice in range(costuras))
+    return RespostaBenchmark(
+        dp=MetricasBenchmark(tempo_ms=tempo_dp, vertices_visitados=vertices_dp),
+        dp_otimizado=MetricasBenchmark(tempo_ms=tempo_otimizado, vertices_visitados=vertices_dp),
+        dijkstra=MetricasBenchmark(tempo_ms=tempo_dijkstra, vertices_visitados=vertices_dijkstra, operacoes_heap=operacoes_heap),
+        resultados_identicos=bool(np.array_equal(resultado_dp, resultado_otimizado)),
+        dimensoes={"largura": imagem.shape[1], "altura": imagem.shape[0]},
     )
 
 

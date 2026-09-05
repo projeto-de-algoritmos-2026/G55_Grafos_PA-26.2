@@ -186,3 +186,15 @@ def test_redimensionar_para_uma_coluna_retorna_400() -> None:
     requisicao = {"id": corpo["id"], "largura_alvo": 1, "operador": "dual"}
     resposta = cliente.post("/api/redimensionar", json=requisicao)
     assert resposta.status_code == 400
+
+
+def test_benchmark_compara_as_variantes() -> None:
+    """Benchmark retorna metricas das tres variantes e dimensoes originais."""
+    corpo = _enviar_imagem(altura=12, largura=14)
+    resposta = cliente.get(f"/api/benchmark/{corpo['id']}", params={"costuras": 3})
+    assert resposta.status_code == 200
+    dados = resposta.json()
+    assert set(dados) == {"dp", "dp_otimizado", "dijkstra", "resultados_identicos", "dimensoes"}
+    assert dados["resultados_identicos"] is True
+    assert dados["dimensoes"] == {"largura": 14, "altura": 12}
+    assert dados["dijkstra"]["operacoes_heap"] > 0
