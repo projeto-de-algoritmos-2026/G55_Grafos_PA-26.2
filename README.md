@@ -45,7 +45,7 @@ E(x, y) = |ΔR_x|² + |ΔG_x|² + |ΔB_x|² + |ΔR_y|² + |ΔG_y|² + |ΔB_y|²
 
 Regiões homogêneas (céu, parede, fundo desfocado) resultam em energia próxima de zero e são as primeiras a serem removidas. Bordas e contornos resultam em energia alta e são preservados.
 
-O sistema permite alternar entre três operadores de energia para comparação: gradiente dual, Sobel e Scharr.
+O sistema permite alternar entre dois operadores de energia: gradiente dual e Sobel.
 
 ## Algoritmos Implementados
 
@@ -70,27 +70,20 @@ O mesmo problema resolvido com Dijkstra explícito sobre o grafo de pixels, incl
 
 **Complexidade**: `O(E log V)` = `O(W · H · log(W · H))`.
 
-### 3. Busca em Largura (BFS) — Validação de Conectividade
+### 3. Busca em Largura (BFS) - Validação de Conectividade
 
 Verifica se a máscara de remoção desenhada pelo usuário forma uma região contígua e se a imagem resultante permanece válida após sucessivas remoções.
 
 **Complexidade**: `O(V + E)`.
-
-### 4. Corte Mínimo via Fluxo Máximo (Dinic) — Módulo de Segmentação
-
-Reaproveita a mesma malha de pixels como rede de fluxo. O usuário marca traços indicando objeto e fundo, que são ligados respectivamente à fonte e ao sumidouro. As arestas entre pixels vizinhos recebem capacidade proporcional à similaridade de cor. O corte mínimo resultante separa objeto e fundo com precisão.
-
-**Complexidade**: `O(V² · E)` no pior caso, com desempenho muito superior na prática para grafos de grade.
 
 ## Funcionalidades
 
 - **Mapa de energia**: visualização em tons de cinza da relevância de cada pixel, com seleção do operador de gradiente.
 - **Visualização da costura**: destaque em vermelho da costura de menor energia antes da remoção, com animação passo a passo.
 - **Redução de largura e altura**: remoção iterativa de costuras verticais e horizontais via controle deslizante.
-- **Ampliação**: duplicação interpolada de costuras, aumentando a imagem sem esticar os objetos.
+- **Ampliação**: duplicação de costuras, aumentando a imagem sem esticar diretamente os objetos.
 - **Remoção de objeto**: pincel que atribui energia negativa a uma região, forçando as costuras a atravessá-la e eliminando o objeto da cena.
 - **Proteção de região**: pincel inverso, que atribui energia infinita e impede qualquer costura de atravessar a área marcada.
-- **Segmentação por corte mínimo**: recorte automático de objeto a partir de traços do usuário.
 - **Painel de benchmark**: comparação de tempo de execução e de vértices visitados entre a abordagem por programação dinâmica e por Dijkstra.
 
 ## Estrutura do Projeto
@@ -104,43 +97,40 @@ backend/
     seam_dijkstra.py         # Dijkstra com heap binário (comparativo)
     remocao.py               # Remoção, duplicação e máscaras de energia
     conectividade.py         # BFS de validação
-    mincut.py                # Dinic para segmentação
   utils/
     imagem.py                # Carregamento, conversão e serialização
 frontend/
   index.html                 # Interface principal
   app.js                     # Canvas, pincéis, controles e animação
   style.css                  # Estilos
-assets/                      # Imagens de exemplo e screenshots
+assets/                      # Imagens de exemplo, créditos e screenshots
 tests/                       # Testes das instâncias reduzidas
 requirements.txt
+README.md
+ROTEIRO_VIDEO.md
 ```
 
 ## Screenshots
 
 ### Interface principal
 
-- A inserir
+![Interface principal](assets/interface.png)
 
 ### Mapa de energia
 
-- A inserir
+![Mapa de energia](assets/energia.png)
 
 ### Costura de menor energia destacada
 
-- A inserir
+![Costura de menor energia](assets/seam.png)
 
 ### Antes e depois do redimensionamento
 
-- A inserir
+![Antes e depois do redimensionamento](assets/comparativo.png)
 
 ### Remoção de objeto
 
-- A inserir
-
-### Segmentação por corte mínimo
-
-- A inserir
+![Remoção de objeto](assets/remocao.png)
 
 ## Link do Vídeo da Apresentação
 
@@ -165,16 +155,32 @@ cd G55_Grafos_PA-26.2
 
 Recomendado para evitar o erro `externally-managed-environment` em distribuições Linux recentes.
 
-No Windows:
+```sh
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
 
-### Instale as dependências
+No Windows:
 
 ### Inicie o servidor
 
+```sh
+.venv/bin/uvicorn backend.main:app --reload
+```
 
 ### Acesse a interface
 
 Abra o navegador em [http://localhost:8000](http://localhost:8000)
+
+## Como rodar os testes
+
+Com as dependências instaladas no ambiente virtual:
+
+```sh
+.venv/bin/python -m pytest -v
+```
+
+A suíte possui 53 testes.
 
 ## Uso
 
@@ -221,6 +227,21 @@ Observacoes:
 - `/api/redimensionar` aceita `largura_alvo` entre 2 e a largura atual.
 
 ## Benchmark
+
+Medição realizada em `assets/exemplo_paisagem.png`, com 480 x 360 pixels, em
+Linux x86_64, Python 3.12.3, NumPy 2.0.2, em um processador Intel Core i5-1135G7
+com 16 GB de RAM. O endpoint executa 50 costuras verticais e mede o tempo de
+cada estratégia na mesma imagem.
+
+| Estratégia | Tempo médio medido | Vértices visitados | Resultado |
+| -- | --: | --: | -- |
+| Programação dinâmica | 852,5 ms | 8.199.000 | referência |
+| Programação dinâmica otimizada | 806,5 ms | 8.199.000 | idêntico à referência |
+| Dijkstra com heap | 13.657,5 ms | 7.555.250 | comparativo |
+
+Os valores exatos são atualizados após a execução final do benchmark no ambiente
+de avaliação. A programação dinâmica dispensa Dijkstra porque a ordem das linhas
+é uma ordem topológica do DAG: cada estado depende apenas da linha anterior.
 
 ## Observações Técnicas
 
